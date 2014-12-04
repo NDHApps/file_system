@@ -9,7 +9,9 @@
 // Definitions for ext2cat to compile against.
 #include "ext2_access.h"
 
+struct ext2_dir_entry* get_dir(void *, struct ext2_inode*);
 
+int resolve_entry_name(struct ext2_dir_entry*, char *);
 
 ///////////////////////////////////////////////////////////
 //  Accessors for the basic components of ext2.
@@ -44,9 +46,9 @@ void * get_block(void * fs, __u32 block_num) {
 // ext2 filesystems will have several of these, but, for simplicity, we will
 // assume there is only one.
 struct ext2_group_desc * get_block_group(void * fs, __u32 block_group_num) {
-    __u32 bs = get_block_size(fs);
-    __u32 bgd = SUPERBLOCK_OFFSET / bs + 1;
-    struct ext2_group_desc * pointer = get_block(fs, bgd);
+    __u32 size = get_block_size(fs);
+    __u32 group = SUPERBLOCK_OFFSET / size + 1;
+    struct ext2_group_desc * pointer = get_block(fs, group);
     return pointer;
 }
 
@@ -55,8 +57,8 @@ struct ext2_group_desc * get_block_group(void * fs, __u32 block_group_num) {
 // would require finding the correct block group, but you may assume it's in the
 // first one.
 struct ext2_inode * get_inode(void * fs, __u32 inode_num) {
-    struct ext2_group_desc * bgd = get_block_group(fs, 0);
-    __u32 it = bgd->bg_inode_table;
+    struct ext2_group_desc * group = get_block_group(fs, 0);
+    __u32 it = group->bg_inode_table;
     struct ext2_inode * pointer = get_block(fs, it);
     pointer += inode_num - 1;
     return pointer;
@@ -106,36 +108,39 @@ struct ext2_inode * get_root_dir(void * fs) {
 
 // Given the inode for a directory and a filename, return the inode number of
 // that file inside that directory, or 0 if it doesn't exist there.
-// 
+//
 // name should be a single component: "foo.txt", not "/files/foo.txt".
-__u32 get_inode_from_dir(void * fs, struct ext2_inode * dir, 
+__u32 get_inode_from_dir(void * fs, struct ext2_inode * dir,
         char * name) {
-    __u32 bs = get_block_size(fs);
-    void * db = get_block(fs, dir->i_block[0]);
-    struct ext2_dir_entry * de = (struct ext2_dir_entry *) db;
-    void * lim = ((void *) de) + bs;
-    __u32 ti = 0;
-    while ((void *) de < lim) {
-        if (de->inode == 0)
+
+    void * directory = get_dir(fs, dir);
+
+    struct ext2_dir_entry * curr_entry = (struct ext2_dir_entry *) directory;
+    void * lim = ((void *) curr_entry) + get_block_size(fs);
+    __u32 target = 0;
+    while ((void *) curr_entry < lim) {
+        if (curr_entry->inode == 0)
             continue;
-        if (strlen(name) == (unsigned char) (de->name_len) && strncmp(name, de->name, strlen(name)) == 0)
-            ti = de->inode;
-        de = (struct ext2_dir_entry *) (((void *) de) + de->rec_len);
+        if (resolve_entry_name(curr_entry, name))
+            target = curr_entry->inode;
+        curr_entry = (struct ext2_dir_entry *) (((void *) curr_entry) + curr_entry->rec_len);
     }
-    return ti;
+
+    return target;
 }
 
 
 // Find the inode number for a file by its full path.
 // This is the functionality that ext2cat ultimately needs.
 __u32 get_inode_by_path(void * fs, char * path) {
-    char ** pts = split_path(path);
+    char ** path_components = split_path(path);
+
     __u32 ino = EXT2_ROOT_INO;
-    for (char ** pt = pts; *pt; pt++) {
+    for (char ** comp = path_components; *comp; comp++) {
         struct ext2_inode * i = get_inode(fs, ino);
-        if (!LINUX_S_ISDIR(i->i_mode)) 
+        if (!LINUX_S_ISDIR(i->i_mode))
             break;
-        ino = get_inode_from_dir(fs, i, *pt);
+        ino = get_inode_from_dir(fs, i, *comp);
         if (ino == 0)
             break;
     }
@@ -145,3 +150,12 @@ __u32 get_inode_by_path(void * fs, char * path) {
         return ino;
 }
 
+struct ext2_dir_entry* get_dir(void *fs, struct ext2_inode *dir) {
+    __u32 bs = get_block_size(fs);
+    return get_block(fs, dir->i_block[0]);
+}
+
+int resolve_entry_name(struct ext2_dir_entry* entry, char* name) {
+  return strlen(name) == (unsigned char) (entry->name_len) &&
+         strncmp(name, entry->name, strlen(name)) == 0;
+}
