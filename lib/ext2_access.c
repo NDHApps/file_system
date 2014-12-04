@@ -36,9 +36,9 @@ __u32 get_block_size(void * fs) {
 // Return a pointer to a block given its number.
 // get_block(fs, 0) == fs;
 void * get_block(void * fs, __u32 block_num) {
-    __u32 bs = get_block_size(fs);
-    void * pointer = bs * block_num + fs;
-    return pointer;
+    __u32 size = get_block_size(fs);
+    void * block = size * block_num + fs;
+    return block;
 }
 
 
@@ -123,6 +123,7 @@ __u32 get_inode_from_dir(void * fs, struct ext2_inode * dir,
             continue;
         if (resolve_entry_name(curr_entry, name))
             target = curr_entry->inode;
+        // move to next entry
         curr_entry = (struct ext2_dir_entry *) (((void *) curr_entry) + curr_entry->rec_len);
     }
 

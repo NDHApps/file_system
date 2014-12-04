@@ -1,0 +1,9 @@
+For this project, we implemented a the driver for the ext2 file system in a read only mode.  The file system works by
+classifying files with named inodes and provides simple operations to retreive them and act on them.
+
+For the extra credit, we also modified ext2cat to support files that use indirect blocks. After all direct blocks are
+loaded, the program then checks if the bytes_read is less than the size of the file. Originally, ext2cat would truncate
+files that were too large to fit entirely in direct blocks. To load the data stored in indirect blocks we took the
+process used to load the direct blocks and modified it to iterate through the indirect blocks until the entire size of
+the file has been read. We added one pointer to the first indirect block and another to the next indirect block, which
+we incremented as we iterated through the blocks.
