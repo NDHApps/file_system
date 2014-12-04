@@ -42,22 +42,21 @@ int main(int argc, char ** argv) {
     }
 
     // Retrieve data from indirect blocks (extra credit)
-    void * indir = get_block(fs, target_ino->i_block[EXT2_IND_BLOCK]);
-    __u32 * next = (__u32 *)indir;
-    while (bytes_read < size && (((__u32)((void *)next - indir)) < get_block_size(fs))) {
-        bytes_left = size - bytes_read;
-        __u32 bytes_to_read = bytes_left > block_size ? block_size : bytes_left;
-        void * block = get_block(fs, *next);
-        memcpy(buf + bytes_read, block, bytes_to_read);
-        bytes_read += bytes_to_read;
-        next++;
+    if (bytes_read < size) {
+        void * indir = get_block(fs, target_ino->i_block[EXT2_IND_BLOCK]);
+        __u32 * next = (__u32 *)indir;
+        while (bytes_read < size && ((__u32)((void *)next - indir) < get_block_size(fs))) {
+            bytes_left = size - bytes_read;
+            if (bytes_left == 0) break;
+            __u32 bytes_to_read = bytes_left > block_size ? block_size : bytes_left;
+            void * block = get_block(fs, *next);
+            next++;
+            memcpy(buf + bytes_read, block, bytes_to_read);
+            bytes_read += bytes_to_read;
+        }
     }
 
     write(1, buf, bytes_read);
-    if (bytes_read < size) {
-        printf("%s: file uses indirect blocks. output was truncated!\n",
-               argv[0]);
-    }
 
     return 0;
 }
